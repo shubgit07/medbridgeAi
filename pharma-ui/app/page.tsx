@@ -1,11 +1,10 @@
-import Image from "next/image";
-import Navigate from "../components/NavigationBar"
+import { redirect } from "next/navigation";
 
-export default function Home() {
-  return (
-    
-   <div>
-    {/* <Navigate/> */}
-     </div>
-  );
+/**
+ * Root page — redirects to the Marketplace.
+ * This is a Server Component (no "use client") so the redirect
+ * happens before any JS is sent to the browser: zero flash.
+ */
+export default function RootPage() {
+  redirect("/marketplace");
 }

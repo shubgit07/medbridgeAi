@@ -1,8 +1,49 @@
+# ─── MediRelife Monorepo .gitignore ──────────────────────────────────────────
 
-app.py
-node_modules/
-.next/
-.venv/
+# ── Python backend ───────────────────────────────────────────────────────────
 __pycache__/
-.env
 *.pyc
+*.pyo
+.venv/
+*.egg-info/
+dist/
+.env
+.env.*
+
+# Sensitive backend config – never commit
+app.py
+
+# ── Frontend (pharma-ui) ─────────────────────────────────────────────────────
+pharma-ui/.next/
+pharma-ui/out/
+pharma-ui/build/
+pharma-ui/node_modules/
+
+# Env files – use .env.local for local dev, never commit secrets
+pharma-ui/.env.local
+pharma-ui/.env*.local
+
+# Next.js generated
+pharma-ui/next-env.d.ts
+pharma-ui/.pnpm-debug.log*
+
+# ── Stray package manager files at repo root ─────────────────────────────────
+# These confuse Turbopack into watching the wrong root directory.
+# Only pharma-ui/package-lock.json is canonical.
+package-lock.json
+package.json
+node_modules/
+yarn.lock
+pnpm-lock.yaml
+
+# ── OS / Editor ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.pem
+.vscode/settings.json
+*.tsbuildinfo
+
+# ── Debug logs ───────────────────────────────────────────────────────────────
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

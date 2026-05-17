@@ -1,9 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import API from "../../lib/api";
-import BarcodeScanner from "react-qr-barcode-scanner";
-import Tesseract from "tesseract.js";
+import dynamic from "next/dynamic";
+import API from "@/lib/api";
+
+// Lazy-load heavy libs – not needed at startup (prevents slow initial compile)
+const BarcodeScanner = dynamic(() => import("react-qr-barcode-scanner"), {
+  ssr: false,
+  loading: () => <div style={{ padding: 40, textAlign: "center", color: "#64748b" }}>Loading camera…</div>,
+});
+
+// Tesseract is loaded on-demand inside handleOCR, not as a top-level import
+async function runOCR(file: File): Promise<string> {
+  const Tesseract = (await import("tesseract.js")).default;
+  const result = await Tesseract.recognize(file, "eng", {
+    logger: (m: any) => console.log("OCR:", m),
+  });
+  return result.data.text;
+}
+
 
 function StepIndicator({ current }: { current: number }) {
   const steps = ["Choose", "Details", "Submit"];
@@ -75,8 +90,7 @@ export default function ScanPage() {
     if (!file) return;
     setOcrLoading(true);
     try {
-      const result = await Tesseract.recognize(file, "eng", { logger: (m: any) => console.log("OCR:", m) });
-      const text = result.data.text;
+      const text = await runOCR(file);
       if (!text || text.trim() === "") { alert("No text detected."); return; }
       const response = await fetch("http://localhost:8000/extract-medicine", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }),
