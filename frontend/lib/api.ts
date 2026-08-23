@@ -1,27 +1,18 @@
 /**
- * lib/api.ts — Axios client for the MediRelife FastAPI backend.
- *
- * Usage:
- *   import API from "@/lib/api";
- *   const res = await API.get("/medicines");
- *
- * Base URL is read from NEXT_PUBLIC_API_URL in .env.local so you never
- * need to touch this file when switching between local / staging / prod.
+ * lib/api.ts — Axios client for MedBridge Fastify backend.
  */
 
 import axios from "axios";
 
 const API = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000",
-  timeout: 15_000, // 15 s — prevents hung requests from freezing the UI
+  timeout: 10_000,
   headers: {
     "Content-Type": "application/json",
   },
 });
 
-// ─── Request interceptor ───────────────────────────────────────────────────
-// Attach the auth token (stored in localStorage) to every request.
-// Server-side requests (SSR/RSC) skip this because localStorage is undefined.
+// ─── Request Interceptor ───
 API.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
     const token = localStorage.getItem("token");
@@ -32,19 +23,26 @@ API.interceptors.request.use((config) => {
   return config;
 });
 
-// ─── Response interceptor ─────────────────────────────────────────────────
-// Log errors in dev; redirect to /signin on 401.
+// ─── Response Interceptor ───
 API.interceptors.response.use(
   (response) => response,
   (error) => {
+    const status = error?.response?.status;
+    const url = error?.config?.url;
+
     if (process.env.NODE_ENV === "development") {
-      console.error("[API Error]", error?.response?.status, error?.config?.url);
+      if (!error?.response) {
+        console.warn(`[API Server Offline] Cannot reach ${url || "backend server"}`);
+      } else {
+        console.warn(`[API Warning] HTTP ${status} on ${url}`);
+      }
     }
-    if (error?.response?.status === 401 && typeof window !== "undefined") {
+
+    if (status === 401 && typeof window !== "undefined") {
       localStorage.removeItem("token");
       localStorage.removeItem("pharmacy_name");
-      window.location.href = "/signin";
     }
+
     return Promise.reject(error);
   }
 );

@@ -1,48 +1,52 @@
-import React from "react";
+import { cn } from "@/lib/utils";
 
-type BadgeStatus = "stable" | "approaching" | "urgent" | "info" | "expired";
+export type BadgeStatus = "stable" | "approaching" | "urgent" | "info" | "expired";
 
-interface StatusBadgeProps {
+export interface StatusBadgeProps {
   status: BadgeStatus;
   label?: string;
+  className?: string;
 }
 
-const STATUS_CONFIG: Record<BadgeStatus, { bg: string; color: string; defaultLabel: string }> = {
-  stable:      { bg: "var(--clr-stable-bg)",      color: "var(--clr-stable)",      defaultLabel: "Stable"      },
-  approaching: { bg: "var(--clr-approaching-bg)",  color: "var(--clr-approaching)", defaultLabel: "Approaching" },
-  urgent:      { bg: "var(--clr-urgent-bg)",       color: "var(--clr-urgent)",      defaultLabel: "Low Stock"   },
-  info:        { bg: "var(--clr-info-bg)",          color: "var(--clr-info)",        defaultLabel: "Tracked"     },
-  expired:     { bg: "var(--clr-error-container)",  color: "var(--clr-error)",       defaultLabel: "Expired"     },
+const STATUS_STYLES: Record<BadgeStatus, { wrap: string; dot: string; defaultLabel: string }> = {
+  stable: {
+    wrap: "bg-green-50 text-green-700 ring-1 ring-inset ring-green-600/20",
+    dot: "bg-green-500",
+    defaultLabel: "Stable",
+  },
+  approaching: {
+    wrap: "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/25",
+    dot: "bg-amber-500",
+    defaultLabel: "Approaching",
+  },
+  urgent: {
+    wrap: "bg-red-50 text-red-700 ring-1 ring-inset ring-red-600/20",
+    dot: "bg-red-500",
+    defaultLabel: "Low Stock",
+  },
+  info: {
+    wrap: "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-600/20",
+    dot: "bg-blue-500",
+    defaultLabel: "Tracked",
+  },
+  expired: {
+    wrap: "bg-red-50 text-red-800 ring-1 ring-inset ring-red-700/30",
+    dot: "bg-red-600",
+    defaultLabel: "Expired",
+  },
 };
 
-export default function StatusBadge({ status, label }: StatusBadgeProps) {
-  const cfg = STATUS_CONFIG[status];
+export default function StatusBadge({ status, label, className }: StatusBadgeProps) {
+  const cfg = STATUS_STYLES[status];
   return (
     <span
-      style={{
-        display:         "inline-flex",
-        alignItems:      "center",
-        gap:             "4px",
-        background:      cfg.bg,
-        color:           cfg.color,
-        borderRadius:    "var(--r-full)",
-        fontSize:        "var(--fs-label-sm)",
-        fontWeight:      700,
-        letterSpacing:   "0.03em",
-        padding:         "2px 10px",
-        whiteSpace:      "nowrap",
-        textTransform:   "uppercase",
-      }}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-mono text-[11px] font-medium tracking-wide whitespace-nowrap",
+        cfg.wrap,
+        className,
+      )}
     >
-      <span
-        style={{
-          width:        "5px",
-          height:       "5px",
-          borderRadius: "50%",
-          background:   cfg.color,
-          flexShrink:   0,
-        }}
-      />
+      <span className={cn("size-1.5 shrink-0 rounded-full", cfg.dot)} aria-hidden="true" />
       {label ?? cfg.defaultLabel}
     </span>
   );
@@ -50,9 +54,9 @@ export default function StatusBadge({ status, label }: StatusBadgeProps) {
 
 /** Helper: derive status from days until expiry + stock */
 export function deriveStatus(daysLeft: number, stock: number): BadgeStatus {
-  if (daysLeft < 0)  return "expired";
+  if (daysLeft < 0) return "expired";
   if (daysLeft < 30) return "urgent";
   if (daysLeft < 90) return "approaching";
-  if (stock === 0)   return "urgent";
+  if (stock === 0) return "urgent";
   return "stable";
 }

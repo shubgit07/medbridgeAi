@@ -20,10 +20,18 @@ frontend/.env.local
 
 # Agent skills and lock files
 .agents/
+.claude/
 .kiro/
 frontend/.agents/
 frontend/.kiro/
 skills-lock.json
+
+# Local notes and docs (kept off GitHub per project policy)
+resume_alignment.md
+docs/
+
+# Local progress notes
+fontendprogress.md
 
 # System & OS
 .DS_Store

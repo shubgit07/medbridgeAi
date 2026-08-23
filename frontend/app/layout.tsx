@@ -28,16 +28,16 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      data-scroll-behavior="smooth"
       className={`${geistSans.variable} ${geistMono.variable}`}
-      style={{ height: "100%" }}
     >
-      <body style={{ minHeight: "100%", display: "flex", flexDirection: "column", margin: 0 }}>
+      <body className="flex min-h-screen flex-col">
         {/* Skip to Main Content Link (Vercel Guidelines) */}
         <a href="#main-content" className="sr-only">
           Skip to main content
         </a>
         <Navigate />
-        <main id="main-content" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+        <main id="main-content" className="flex flex-1 flex-col">
           {children}
         </main>
       </body>

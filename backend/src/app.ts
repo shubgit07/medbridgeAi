@@ -9,6 +9,7 @@ import { pharmacyRoutes } from './modules/pharmacies/routes.js';
 import { drugRoutes } from './modules/drugs/routes.js';
 import { listingRoutes } from './modules/listings/routes.js';
 import { orderRoutes } from './modules/orders/routes.js';
+import { inventoryRoutes } from './modules/inventory/routes.js';
 import { ocrRoutes } from './modules/ocr/routes.js';
 import { aiRoutes } from './modules/ai/routes.js';
 import { registerWebSocketRoutes } from './websocket/notifications.js';
@@ -66,6 +67,7 @@ export function buildApp(): FastifyInstance {
   fastify.register(drugRoutes, { prefix: '/drugs' });
   fastify.register(listingRoutes, { prefix: '/listings' });
   fastify.register(orderRoutes, { prefix: '/orders' });
+  fastify.register(inventoryRoutes, { prefix: '/inventory' });
   fastify.register(ocrRoutes, { prefix: '/ocr' });
   fastify.register(aiRoutes, { prefix: '/ai' });
 

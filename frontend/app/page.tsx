@@ -1,10 +1,29 @@
-import { redirect } from "next/navigation";
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
 /**
- * Root page — redirects to the Marketplace.
- * This is a Server Component (no "use client") so the redirect
- * happens before any JS is sent to the browser: zero flash.
+ * Root page — routes by session:
+ *  - signed in  -> /dashboard
+ *  - signed out -> /signin
+ * (Session lives in localStorage, so the check must run client-side.)
  */
 export default function RootPage() {
-  redirect("/marketplace");
+  const router = useRouter();
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    router.replace(token ? "/dashboard" : "/signin");
+  }, [router]);
+
+  return (
+    <div className="flex min-h-[calc(100vh-64px)] items-center justify-center">
+      <Loader2
+        className="size-5 animate-spin text-muted-foreground"
+        aria-label="Loading MedBridge"
+      />
+    </div>
+  );
 }

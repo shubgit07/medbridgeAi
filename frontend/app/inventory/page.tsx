@@ -1,10 +1,21 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import StatusBadge, { deriveStatus } from "@/components/StatusBadge";
+import {
+  CircleAlert,
+  PackageOpen,
+  PackagePlus,
+} from "lucide-react";
 import API from "@/lib/api";
+import StatusBadge, { deriveStatus, type BadgeStatus } from "@/components/StatusBadge";
+import DecayChip from "@/components/decay-chip";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 interface InventoryItem {
   medicine_id: number;
@@ -17,212 +28,291 @@ interface InventoryItem {
   days_left: number;
 }
 
-const FALLBACK_ITEMS: InventoryItem[] = [
-  { medicine_id: 1, brand_name: "Crocin 500mg", generic_name: "Paracetamol", dosage_form: "Tablet", stock_qty: 240, expiry_date: "2026-11-15", price: 28.5, days_left: 182 },
-  { medicine_id: 2, brand_name: "Augmentin 625", generic_name: "Amoxicillin", dosage_form: "Tablet", stock_qty: 60, expiry_date: "2026-08-20", price: 185.0, days_left: 28 },
-  { medicine_id: 3, brand_name: "Combiflam", generic_name: "Ibuprofen", dosage_form: "Tablet", stock_qty: 8, expiry_date: "2026-08-10", price: 42.0, days_left: 18 },
-  { medicine_id: 4, brand_name: "Azithral 500", generic_name: "Azithromycin", dosage_form: "Tablet", stock_qty: 30, expiry_date: "2026-09-05", price: 110.0, days_left: 44 },
-  { medicine_id: 5, brand_name: "Dolo 650", generic_name: "Paracetamol", dosage_form: "Tablet", stock_qty: 500, expiry_date: "2027-04-01", price: 30.0, days_left: 684 },
-];
+type FilterKey = "all" | BadgeStatus;
 
-type FilterKey = "all" | "stable" | "approaching" | "urgent" | "expired";
+const FILTERS: { key: FilterKey; label: string }[] = [
+  { key: "all", label: "All stock" },
+  { key: "stable", label: "Stable" },
+  { key: "approaching", label: "Approaching" },
+  { key: "urgent", label: "Urgent near-expiry" },
+  { key: "expired", label: "Expired" },
+];
 
 export default function InventoryPage() {
   const router = useRouter();
+  const { isLoggedIn } = useAuth();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchFailed, setFetchFailed] = useState(false);
   const [filter, setFilter] = useState<FilterKey>("all");
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/signin");
+    if (!isLoggedIn) {
+      router.replace("/signin");
       return;
     }
-    API.get(`/inventory`)
-      .then(({ data }) => setItems(Array.isArray(data) && data.length > 0 ? data : FALLBACK_ITEMS))
-      .catch(() => setItems(FALLBACK_ITEMS))
-      .finally(() => setLoading(false));
-  }, [router]);
 
-  const counts = useMemo(
-    () => ({
-      all: items.length,
-      stable: items.filter((i) => deriveStatus(i.days_left, i.stock_qty) === "stable").length,
-      approaching: items.filter((i) => deriveStatus(i.days_left, i.stock_qty) === "approaching").length,
-      urgent: items.filter((i) => deriveStatus(i.days_left, i.stock_qty) === "urgent").length,
-      expired: items.filter((i) => deriveStatus(i.days_left, i.stock_qty) === "expired").length,
-    }),
-    [items]
+    let cancelled = false;
+    API.get("/inventory")
+      .then(({ data }) => {
+        if (!cancelled) setItems(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setFetchFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedIn, reloadKey, router]);
+
+  const retry = () => {
+    setFetchFailed(false);
+    setLoading(true);
+    setReloadKey((k) => k + 1);
+  };
+
+  const statusOf = useCallback(
+    (item: InventoryItem): BadgeStatus => deriveStatus(item.days_left, item.stock_qty),
+    [],
   );
+
+  const counts = useMemo(() => {
+    const base: Record<FilterKey, number> = {
+      all: items.length,
+      stable: 0,
+      approaching: 0,
+      urgent: 0,
+      expired: 0,
+      info: 0,
+    };
+    for (const item of items) base[statusOf(item)] += 1;
+    return base;
+  }, [items, statusOf]);
 
   const filtered = useMemo(
-    () => (filter === "all" ? items : items.filter((i) => deriveStatus(i.days_left, i.stock_qty) === filter)),
-    [items, filter]
+    () => (filter === "all" ? items : items.filter((i) => statusOf(i) === filter)),
+    [items, filter, statusOf],
   );
 
-  const FILTERS: { key: FilterKey; label: string }[] = [
-    { key: "all", label: `All Stock (${counts.all})` },
-    { key: "stable", label: `Stable (${counts.stable})` },
-    { key: "approaching", label: `Approaching (${counts.approaching})` },
-    { key: "urgent", label: `Urgent Near-Expiry (${counts.urgent})` },
-    { key: "expired", label: `Expired (${counts.expired})` },
-  ];
-
   return (
-    <div style={{ minHeight: "calc(100vh - 64px)", maxWidth: "1280px", margin: "0 auto", padding: "32px 24px" }}>
-      
-      {/* Header Band */}
-      <div
-        className="fade-in"
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          flexWrap: "wrap",
-          gap: "16px",
-          marginBottom: "28px",
-          borderBottom: "1px solid #dddddd",
-          paddingBottom: "20px",
-        }}
-      >
+    <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6">
+      {/* Header */}
+      <header className="fade-in flex flex-wrap items-start justify-between gap-4 border-b border-border pb-6">
         <div>
-          <p className="section-label" style={{ marginBottom: "4px" }}>Pharmacy Stock Management</p>
-          <h1 style={{ fontSize: "32px", fontWeight: 500, color: "#181d26", letterSpacing: "-0.02em", margin: 0 }}>
-            Inventory Catalog
+          <p className="text-xs font-medium uppercase tracking-[0.05em] text-muted-foreground">
+            Pharmacy stock management
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+            Inventory catalog
           </h1>
-          <p style={{ fontSize: "14px", color: "#41454d", marginTop: "4px" }}>
-            Track batch expiry dates, stock quantities, and dynamic urgency decay
+          <p className="mt-1 text-sm text-muted-foreground">
+            Track batch expiry decay, stock levels, and pricing at a glance.
           </p>
         </div>
-        <Link
-          href="/scan"
-          style={{
-            background: "#181d26",
-            color: "#ffffff",
-            borderRadius: "12px",
-            padding: "12px 24px",
-            fontSize: "14px",
-            fontWeight: 500,
-            textDecoration: "none",
-          }}
+
+        <Button asChild className="bg-brand hover:bg-brand-strong">
+          <Link href="/scan">
+            <PackagePlus className="size-4" aria-hidden="true" />
+            Add stock batch
+          </Link>
+        </Button>
+      </header>
+
+      {/* Fetch error */}
+      {fetchFailed && (
+        <div
+          role="alert"
+          className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-3"
         >
-          + Add Stock Batch
-        </Link>
-      </div>
-
-      {/* Filter Rail (Vercel Guidelines: aria-pressed & tabular-nums) */}
-      <div style={{ display: "flex", gap: "8px", marginBottom: "24px", flexWrap: "wrap" }} role="tablist" aria-label="Stock Status Filters">
-        {FILTERS.map((f) => (
-          <button
-            key={f.key}
-            type="button"
-            role="tab"
-            aria-selected={filter === f.key}
-            aria-pressed={filter === f.key}
-            onClick={() => setFilter(f.key)}
-            className="tabular-nums"
-            style={{
-              padding: "6px 16px",
-              borderRadius: 9999,
-              border: "1px solid",
-              cursor: "pointer",
-              borderColor: filter === f.key ? "#181d26" : "#dddddd",
-              background: filter === f.key ? "#181d26" : "#ffffff",
-              color: filter === f.key ? "#ffffff" : "#41454d",
-              fontSize: "13px",
-              fontWeight: filter === f.key ? 500 : 400,
-            }}
+          <div className="flex items-center gap-2.5 text-sm text-destructive">
+            <CircleAlert className="size-4 shrink-0" aria-hidden="true" />
+            Couldn&apos;t load your inventory. Check your connection and retry.
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={retry}
+            disabled={loading}
+            className="border-destructive/30 text-destructive hover:bg-destructive/5 hover:text-destructive"
           >
-            {f.label}
-          </button>
-        ))}
-      </div>
-
-      {loading && (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "64px 0" }}>
-          <span className="spinner" style={{ width: 32, height: 32, marginBottom: 12 }} />
-          <span style={{ fontSize: "14px", color: "#41454d" }}>Loading catalog items…</span>
+            Retry
+          </Button>
         </div>
       )}
 
-      {!loading && filtered.length > 0 && (
-        <div style={{ background: "#ffffff", border: "1px solid #dddddd", borderRadius: "12px", overflow: "hidden" }}>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "2.5fr 2fr 1fr 1fr 1.2fr 1fr",
-              padding: "12px 20px",
-              gap: "12px",
-              background: "#f8fafc",
-              borderBottom: "1px solid #dddddd",
-            }}
-          >
-            {["Medicine Brand", "Generic Salt", "Stock", "MRP", "Expiry Date", "Status"].map((h) => (
-              <span key={h} style={{ fontSize: "11px", fontWeight: 500, color: "#41454d", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                {h}
+      {/* Filter rail */}
+      <div className="mt-6 flex flex-wrap gap-2" aria-label="Stock status filters">
+        {FILTERS.map((f) => {
+          const selected = filter === f.key;
+          return (
+            <button
+              key={f.key}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => setFilter(f.key)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 font-mono text-xs transition-colors outline-offset-2 focus-visible:outline-2 focus-visible:outline-brand",
+                selected
+                  ? "border-[var(--mb-ink)] bg-[var(--mb-ink)] text-white"
+                  : "border-border bg-card text-muted-foreground hover:border-foreground/30 hover:text-foreground",
+              )}
+            >
+              {f.label}
+              <span
+                className={cn(
+                  "tabular-nums",
+                  selected ? "text-white/70" : "text-muted-foreground/70",
+                )}
+              >
+                {counts[f.key]}
               </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Table */}
+      <Card className="mt-5 overflow-hidden p-0">
+        {loading ? (
+          /* Loading skeleton */
+          <div className="divide-y">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="grid grid-cols-[minmax(0,2.5fr)_minmax(0,1.8fr)_80px_90px_160px_110px] items-center gap-4 px-6 py-4">
+                <div className="space-y-2">
+                  <Skeleton className="h-3.5 w-3/4" />
+                  <Skeleton className="h-3 w-1/4" />
+                </div>
+                <Skeleton className="h-3.5 w-4/5" />
+                <Skeleton className="h-3.5 w-12" />
+                <Skeleton className="h-3.5 w-14" />
+                <Skeleton className="h-6 w-full" />
+                <Skeleton className="h-5 w-20 rounded-full" />
+              </div>
             ))}
           </div>
-          {filtered.map((item, i) => {
-            const expiry = new Date(item.expiry_date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-            const status = deriveStatus(item.days_left, item.stock_qty);
-            return (
-              <div
-                key={item.medicine_id}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "2.5fr 2fr 1fr 1fr 1.2fr 1fr",
-                  padding: "14px 20px",
-                  gap: "12px",
-                  alignItems: "center",
-                  borderBottom: i < filtered.length - 1 ? "1px solid #e0e2e6" : "none",
-                }}
-              >
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: "14px", fontWeight: 500, color: "#181d26", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.brand_name}</div>
-                  {item.dosage_form && <div style={{ fontSize: "12px", color: "#41454d" }}>{item.dosage_form}</div>}
-                </div>
-                <div style={{ fontSize: "13px", color: "#41454d", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.generic_name}</div>
-                <div style={{ fontSize: "13px", fontWeight: 500, color: item.stock_qty < 10 ? "#aa2d00" : "#181d26" }} className="tabular-nums">
-                  {item.stock_qty} <span style={{ fontWeight: 400, color: "#41454d" }}>units</span>
-                </div>
-                <div style={{ fontSize: "13px", color: "#181d26" }} className="tabular-nums">₹{item.price.toFixed(2)}</div>
-                <div style={{ fontSize: "13px", color: "#41454d" }} className="tabular-nums">{expiry}</div>
-                <div>
-                  <StatusBadge status={status} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {!loading && filtered.length === 0 && (
-        <div style={{ background: "#ffffff", border: "1px solid #dddddd", borderRadius: "12px", textAlign: "center", padding: "64px 32px" }}>
-          <div style={{ fontSize: "40px", marginBottom: "16px" }}>📦</div>
-          <div style={{ fontSize: "18px", fontWeight: 500, color: "#181d26", marginBottom: "8px" }}>
-            No medicines match filter &quot;{filter}&quot;
+        ) : filtered.length === 0 ? (
+          /* Empty state */
+          <div className="flex flex-col items-center px-8 py-16 text-center">
+            <span className="flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+              <PackageOpen className="size-6" aria-hidden="true" />
+            </span>
+            <h2 className="mt-4 text-base font-semibold text-foreground">
+              {items.length === 0
+                ? "Your catalog is empty"
+                : `No ${filter === "all" ? "" : filter + " "}items in your catalog`}
+            </h2>
+            <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-muted-foreground">
+              {items.length === 0
+                ? "Scan a medicine box label to register your first batch with AI-extracted expiry details."
+                : "Switch to another status filter, or add fresh stock to fill this view."}
+            </p>
+            <Button asChild className="mt-5 bg-brand hover:bg-brand-strong">
+              <Link href="/scan">
+                <PackagePlus className="size-4" aria-hidden="true" />
+                Add medicine batch
+              </Link>
+            </Button>
           </div>
-          <p style={{ fontSize: "14px", color: "#41454d", maxWidth: "340px", margin: "0 auto 24px" }}>
-            Select another status filter or add new stock to your catalog.
-          </p>
-          <Link
-            href="/scan"
-            style={{
-              background: "#181d26",
-              color: "#ffffff",
-              borderRadius: "12px",
-              padding: "10px 20px",
-              fontSize: "14px",
-              fontWeight: 500,
-              textDecoration: "none",
-            }}
-          >
-            + Add Medicine Batch
-          </Link>
-        </div>
-      )}
+        ) : (
+          <>
+            {/* Header row */}
+            <div className="grid grid-cols-[minmax(0,2.5fr)_minmax(0,1.8fr)_80px_90px_160px_110px] items-center gap-4 border-b bg-muted/50 px-6 py-2.5">
+              <span className="text-[11px] font-semibold tracking-[0.05em] text-muted-foreground uppercase">
+                Medicine brand
+              </span>
+              <span className="hidden text-[11px] font-semibold tracking-[0.05em] text-muted-foreground uppercase sm:block">
+                Generic salt
+              </span>
+              <span className="hidden text-[11px] font-semibold tracking-[0.05em] text-muted-foreground uppercase sm:block">
+                Stock
+              </span>
+              <span className="hidden text-[11px] font-semibold tracking-[0.05em] text-muted-foreground uppercase sm:block">
+                MRP
+              </span>
+              <span className="text-[11px] font-semibold tracking-[0.05em] text-muted-foreground uppercase">
+                Expiry decay
+              </span>
+              <span className="text-right text-[11px] font-semibold tracking-[0.05em] text-muted-foreground uppercase">
+                Status
+              </span>
+            </div>
+
+            {/* Rows */}
+            <ul className="divide-y">
+              {filtered.map((item) => {
+                const status = statusOf(item);
+                return (
+                  <li
+                    key={item.medicine_id}
+                    className="group grid grid-cols-[minmax(0,2.5fr)_minmax(0,1.8fr)_80px_90px_160px_110px] items-center gap-4 px-6 py-3.5 transition-colors hover:bg-muted/40"
+                  >
+                    {/* Brand */}
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {item.brand_name}
+                      </p>
+                      {item.dosage_form && (
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {item.dosage_form}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Salt */}
+                    <p className="hidden truncate text-sm text-muted-foreground sm:block">
+                      {item.generic_name}
+                    </p>
+
+                    {/* Stock */}
+                    <p
+                      className={cn(
+                        "font-mono text-sm tabular-nums",
+                        item.stock_qty > 0 && item.stock_qty < 10
+                          ? "font-medium text-red-600"
+                          : "text-foreground",
+                      )}
+                    >
+                      {item.stock_qty}
+                    </p>
+
+                    {/* Price */}
+                    <p className="font-mono text-sm font-medium tabular-nums text-foreground">
+                      ₹{item.price.toFixed(2)}
+                    </p>
+
+                    {/* Decay chip (signature) */}
+                    <DecayChip expiryDate={item.expiry_date} daysLeft={item.days_left} />
+
+                    {/* Status */}
+                    <div className="text-right">
+                      <StatusBadge status={status} />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+
+            {/* Footer summary */}
+            <div className="flex items-center justify-between border-t bg-muted/30 px-6 py-2.5">
+              <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                Showing {filtered.length} of {items.length} batches
+              </span>
+              <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                ₹
+                {filtered
+                  .reduce((sum, i) => sum + i.price * i.stock_qty, 0)
+                  .toLocaleString("en-IN", { maximumFractionDigits: 0 })}{" "}
+                total catalog value
+              </span>
+            </div>
+          </>
+        )}
+      </Card>
     </div>
   );
 }

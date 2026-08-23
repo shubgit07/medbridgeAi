@@ -2,11 +2,21 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { LogOut, Menu, PackagePlus, Pill } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { emitAuthChange, useAuth } from "@/hooks/useAuth";
+import { cn } from "@/lib/utils";
 
 const NAV_LINKS = [
   { href: "/search", label: "Medicine Search", auth: false },
-  { href: "/marketplace", label: "Marketplace Exchange", auth: false },
+  { href: "/marketplace", label: "Marketplace", auth: false },
   { href: "/inventory", label: "My Inventory", auth: true },
   { href: "/dashboard", label: "Dashboard", auth: true },
 ];
@@ -14,348 +24,202 @@ const NAV_LINKS = [
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [pharmacyName, setPharmacyName] = useState("");
+  const { isLoggedIn, pharmacyName } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    const name = localStorage.getItem("pharmacy_name");
-    setIsLoggedIn(!!token);
-    setPharmacyName(name || "");
-  }, []);
-
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     localStorage.removeItem("token");
     localStorage.removeItem("pharmacy_name");
-    setIsLoggedIn(false);
+    emitAuthChange();
+    setMenuOpen(false);
     router.push("/signin");
-  };
+  }, [router]);
 
-  const isActive = (href: string) => pathname === href;
+  const visibleLinks = NAV_LINKS.filter((l) => !l.auth || isLoggedIn);
 
   return (
-    <>
+    <header className="sticky top-0 z-50 border-b border-white/10 bg-[var(--mb-ink)] text-white shadow-sm">
       <nav
-        aria-label="Main Navigation"
-        style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 50,
-          background: "#ffffff",
-          borderBottom: "1px solid #dddddd",
-          height: "64px",
-        }}
+        aria-label="Main navigation"
+        className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-6 px-4 sm:px-6"
       >
-        <div
-          style={{
-            maxWidth: "1280px",
-            margin: "0 auto",
-            padding: "0 24px",
-            height: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "24px",
-          }}
+        {/* Brand */}
+        <Link
+          href="/"
+          aria-label="MedBridge home"
+          className="flex shrink-0 items-center gap-2.5 rounded-md outline-offset-4 transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-brand"
         >
-          {/* ── Brand Logo Link (Vercel Guidelines: aria-label) ── */}
-          <Link
-            href="/"
-            aria-label="MedBridge Near-Expiry Exchange Home"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-              textDecoration: "none",
-              flexShrink: 0,
-            }}
-          >
-            <span
-              style={{
-                width: "32px",
-                height: "32px",
-                borderRadius: "10px",
-                background: "#181d26",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#ffffff",
-                fontSize: "15px",
-                fontWeight: 600,
-                letterSpacing: "-0.02em",
-              }}
-            >
-              M
+          <span className="flex size-8 items-center justify-center rounded-lg bg-brand">
+            <Pill className="size-4.5 text-white" aria-hidden="true" />
+          </span>
+          <span className="text-base font-semibold tracking-tight">
+            MedBridge
+          </span>
+          {pharmacyName && (
+            <span className="hidden max-w-40 truncate text-sm font-normal text-white/60 md:inline">
+              / {pharmacyName}
             </span>
-            <span
-              style={{
-                fontSize: "18px",
-                fontWeight: 600,
-                color: "#181d26",
-                letterSpacing: "-0.02em",
-              }}
-            >
-              MedBridge
-            </span>
-            {pharmacyName && (
-              <span
-                style={{
-                  fontSize: "13px",
-                  color: "#41454d",
-                  fontWeight: 400,
-                }}
-              >
-                / {pharmacyName}
-              </span>
-            )}
-          </Link>
+          )}
+        </Link>
 
-          {/* ── Desktop Nav Links (Vercel Guidelines: aria-current) ── */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-            }}
-            className="nav-desktop"
-          >
-            {NAV_LINKS.filter((l) => !l.auth || isLoggedIn).map((link) => (
+        {/* Desktop links */}
+        <div className="hidden items-center gap-1 md:flex">
+          {visibleLinks.map((link) => {
+            const active = pathname === link.href;
+            return (
               <Link
                 key={link.href}
                 href={link.href}
-                aria-current={isActive(link.href) ? "page" : undefined}
-                style={{
-                  padding: "8px 14px",
-                  borderRadius: "10px",
-                  fontSize: "14px",
-                  fontWeight: isActive(link.href) ? 600 : 400,
-                  color: isActive(link.href) ? "#181d26" : "#41454d",
-                  background: isActive(link.href) ? "#f8fafc" : "transparent",
-                  textDecoration: "none",
-                  border: isActive(link.href) ? "1px solid #dddddd" : "1px solid transparent",
-                  transition: "background 0.15s, color 0.15s",
-                }}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "relative rounded-md px-3 py-1.5 text-sm transition-colors outline-offset-2 focus-visible:outline-2 focus-visible:outline-brand",
+                  active
+                    ? "font-medium text-white after:absolute after:-bottom-[13px] after:left-3 after:right-3 after:h-0.5 after:rounded-full after:bg-brand"
+                    : "text-white/65 hover:bg-white/10 hover:text-white",
+                )}
               >
                 {link.label}
               </Link>
-            ))}
-          </div>
-
-          {/* ── Right Action Buttons ── */}
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
-            {isLoggedIn ? (
-              <>
-                <Link
-                  href="/scan"
-                  style={{
-                    background: "#181d26",
-                    color: "#ffffff",
-                    borderRadius: "12px",
-                    padding: "8px 16px",
-                    fontSize: "14px",
-                    fontWeight: 500,
-                    textDecoration: "none",
-                  }}
-                >
-                  + Add Stock
-                </Link>
-                <button
-                  id="navbar-logout-btn"
-                  onClick={handleLogout}
-                  type="button"
-                  style={{
-                    background: "#ffffff",
-                    color: "#181d26",
-                    border: "1px solid #dddddd",
-                    borderRadius: "12px",
-                    padding: "8px 16px",
-                    fontSize: "14px",
-                    fontWeight: 500,
-                    cursor: "pointer",
-                  }}
-                >
-                  Sign Out
-                </button>
-              </>
-            ) : (
-              <>
-                <Link
-                  href="/signin"
-                  style={{
-                    background: "#ffffff",
-                    color: "#181d26",
-                    border: "1px solid #dddddd",
-                    borderRadius: "12px",
-                    padding: "8px 16px",
-                    fontSize: "14px",
-                    fontWeight: 500,
-                    textDecoration: "none",
-                  }}
-                >
-                  Sign In
-                </Link>
-                <Link
-                  href="/signup"
-                  style={{
-                    background: "#181d26",
-                    color: "#ffffff",
-                    borderRadius: "12px",
-                    padding: "8px 16px",
-                    fontSize: "14px",
-                    fontWeight: 500,
-                    textDecoration: "none",
-                  }}
-                >
-                  Sign Up
-                </Link>
-              </>
-            )}
-
-            {/* Mobile Hamburger Toggle (Vercel Guidelines: aria-label & aria-expanded) */}
-            <button
-              id="navbar-menu-toggle"
-              type="button"
-              aria-label="Toggle navigation menu"
-              aria-expanded={menuOpen}
-              onClick={() => setMenuOpen((o) => !o)}
-              style={{
-                display: "none",
-                background: "#ffffff",
-                border: "1px solid #dddddd",
-                borderRadius: "10px",
-                padding: "6px 10px",
-                cursor: "pointer",
-                color: "#181d26",
-                fontSize: "18px",
-              }}
-              className="nav-mobile-toggle"
-            >
-              {menuOpen ? "✕" : "☰"}
-            </button>
-          </div>
+            );
+          })}
         </div>
 
-        {/* ── Mobile Dropdown Sheet ── */}
-        {menuOpen && (
-          <div
-            style={{
-              borderTop: "1px solid #dddddd",
-              background: "#ffffff",
-              padding: "16px 24px",
-            }}
+        {/* Actions */}
+        <div className="flex shrink-0 items-center gap-2">
+          {isLoggedIn ? (
+            <>
+              <Button
+                size="sm"
+                onClick={() => router.push("/scan")}
+                className="hidden bg-white text-[var(--mb-ink)] hover:bg-white/90 sm:inline-flex"
+              >
+                <PackagePlus className="size-4" aria-hidden="true" />
+                Add Stock
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="Sign out"
+                onClick={handleLogout}
+                className="hidden size-8 text-white/70 hover:bg-white/10 hover:text-white sm:inline-flex"
+              >
+                <LogOut className="size-4" aria-hidden="true" />
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => router.push("/signin")}
+                className="hidden text-white/80 hover:bg-white/10 hover:text-white sm:inline-flex"
+              >
+                Sign in
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => router.push("/signup")}
+                className="hidden bg-white text-[var(--mb-ink)] hover:bg-white/90 sm:inline-flex"
+              >
+                Sign up
+              </Button>
+            </>
+          )}
+
+          {/* Mobile trigger */}
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label="Open navigation menu"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen(true)}
+            className="size-9 text-white hover:bg-white/10 md:hidden"
           >
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {NAV_LINKS.filter((l) => !l.auth || isLoggedIn).map((link) => (
+            <Menu className="size-5" aria-hidden="true" />
+          </Button>
+        </div>
+      </nav>
+
+      {/* Mobile drawer */}
+      <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+        <SheetContent
+          side="right"
+          className="w-72 border-white/10 bg-[var(--mb-ink)] text-white [&>button]:text-white/70"
+        >
+          <SheetHeader className="border-b border-white/10 text-left">
+            <SheetTitle className="flex items-center gap-2.5 text-white">
+              <span className="flex size-8 items-center justify-center rounded-lg bg-brand">
+                <Pill className="size-4.5" aria-hidden="true" />
+              </span>
+              MedBridge
+              {pharmacyName && (
+                <span className="truncate text-xs font-normal text-white/60">
+                  / {pharmacyName}
+                </span>
+              )}
+            </SheetTitle>
+          </SheetHeader>
+
+          <nav aria-label="Mobile navigation" className="flex flex-col gap-1 px-3 pt-2">
+            {visibleLinks.map((link) => {
+              const active = pathname === link.href;
+              return (
                 <Link
                   key={link.href}
                   href={link.href}
-                  aria-current={isActive(link.href) ? "page" : undefined}
+                  aria-current={active ? "page" : undefined}
                   onClick={() => setMenuOpen(false)}
-                  style={{
-                    padding: "10px 14px",
-                    borderRadius: "10px",
-                    fontSize: "14px",
-                    fontWeight: isActive(link.href) ? 600 : 400,
-                    color: isActive(link.href) ? "#181d26" : "#41454d",
-                    background: isActive(link.href) ? "#f8fafc" : "transparent",
-                    textDecoration: "none",
-                  }}
+                  className={cn(
+                    "rounded-lg px-3 py-2.5 text-sm transition-colors",
+                    active
+                      ? "bg-white/10 font-medium text-white"
+                      : "text-white/65 hover:bg-white/5 hover:text-white",
+                  )}
                 >
                   {link.label}
                 </Link>
-              ))}
+              );
+            })}
+
+            <div className="mt-4 flex flex-col gap-2 border-t border-white/10 pt-4">
               {isLoggedIn ? (
                 <>
-                  <Link
-                    href="/scan"
-                    onClick={() => setMenuOpen(false)}
-                    style={{
-                      background: "#181d26",
-                      color: "#ffffff",
-                      borderRadius: "12px",
-                      padding: "12px",
-                      textAlign: "center",
-                      textDecoration: "none",
-                      fontSize: "14px",
-                      fontWeight: 500,
-                      marginTop: "8px",
-                    }}
-                  >
-                    + Add Stock
+                  <Link href="/scan" onClick={() => setMenuOpen(false)}>
+                    <Button className="w-full bg-brand hover:bg-brand-strong">
+                      <PackagePlus className="size-4" aria-hidden="true" />
+                      Add Stock
+                    </Button>
                   </Link>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      handleLogout();
-                    }}
-                    style={{
-                      background: "#ffffff",
-                      color: "#181d26",
-                      border: "1px solid #dddddd",
-                      borderRadius: "12px",
-                      padding: "12px",
-                      fontSize: "14px",
-                      fontWeight: 500,
-                      cursor: "pointer",
-                      marginTop: "4px",
-                    }}
+                  <Button
+                    variant="outline"
+                    className="w-full border-white/15 bg-transparent text-white/80 hover:bg-white/10 hover:text-white"
+                    onClick={handleLogout}
                   >
-                    Sign Out
-                  </button>
+                    <LogOut className="size-4" aria-hidden="true" />
+                    Sign out
+                  </Button>
                 </>
               ) : (
                 <>
-                  <Link
-                    href="/signin"
-                    onClick={() => setMenuOpen(false)}
-                    style={{
-                      background: "#ffffff",
-                      color: "#181d26",
-                      border: "1px solid #dddddd",
-                      borderRadius: "12px",
-                      padding: "12px",
-                      textAlign: "center",
-                      textDecoration: "none",
-                      fontSize: "14px",
-                      fontWeight: 500,
-                      marginTop: "8px",
-                    }}
-                  >
-                    Sign In
+                  <Link href="/signin" onClick={() => setMenuOpen(false)}>
+                    <Button
+                      variant="outline"
+                      className="w-full border-white/15 bg-transparent text-white/80 hover:bg-white/10 hover:text-white"
+                    >
+                      Sign in
+                    </Button>
                   </Link>
-                  <Link
-                    href="/signup"
-                    onClick={() => setMenuOpen(false)}
-                    style={{
-                      background: "#181d26",
-                      color: "#ffffff",
-                      borderRadius: "12px",
-                      padding: "12px",
-                      textAlign: "center",
-                      textDecoration: "none",
-                      fontSize: "14px",
-                      fontWeight: 500,
-                      marginTop: "4px",
-                    }}
-                  >
-                    Sign Up
+                  <Link href="/signup" onClick={() => setMenuOpen(false)}>
+                    <Button className="w-full bg-brand hover:bg-brand-strong">
+                      Sign up
+                    </Button>
                   </Link>
                 </>
               )}
             </div>
-          </div>
-        )}
-      </nav>
-
-      {/* Inline Responsive Styles */}
-      <style>{`
-        @media (max-width: 768px) {
-          .nav-desktop { display: none !important; }
-          .nav-mobile-toggle { display: flex !important; }
-        }
-      `}</style>
-    </>
+          </nav>
+        </SheetContent>
+      </Sheet>
+    </header>
   );
 }

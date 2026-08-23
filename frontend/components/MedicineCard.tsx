@@ -1,14 +1,23 @@
-import React from "react";
-import StatusBadge, { deriveStatus } from "./StatusBadge";
+"use client";
 
-interface MedicineCardProps {
+import { cn } from "@/lib/utils";
+import StatusBadge, { deriveStatus } from "./StatusBadge";
+import DecayChip from "./decay-chip";
+
+export interface MedicineCardProps {
   brand_name: string;
-  generic_name: string;
+  generic_name?: string;
   dosage_form?: string;
   manufacturer?: string;
-  stock: number;
-  expiry_date: string;
-  price: number;
+  /** Optional — hidden when the catalog has no stock data for this drug */
+  stock?: number;
+  /** Optional — decay chip is hidden when there's no expiry data */
+  expiry_date?: string;
+  /** Days until expiry — computed by the caller at data-fetch time */
+  days_left?: number;
+  price?: number;
+  isSelected?: boolean;
+  onSelect?: () => void;
 }
 
 export default function MedicineCard({
@@ -18,92 +27,115 @@ export default function MedicineCard({
   manufacturer,
   stock,
   expiry_date,
+  days_left,
   price,
+  isSelected,
+  onSelect,
 }: MedicineCardProps) {
-  const expiry = new Date(expiry_date);
-  const today = new Date();
-  const daysLeft = Math.round((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  const status = deriveStatus(daysLeft, stock);
-
-  const expiryStr = expiry.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  const hasExpiry = Boolean(expiry_date && days_left !== undefined);
+  const status =
+    hasExpiry && days_left !== undefined
+      ? deriveStatus(days_left, stock ?? 1)
+      : null;
 
   return (
     <div
-      style={{
-        background: "#ffffff",
-        border: "1px solid #dddddd",
-        borderRadius: "10px",
-        padding: "20px",
-        display: "flex",
-        flexDirection: "column",
-        gap: "12px",
-      }}
+      onClick={onSelect}
+      role={onSelect ? "button" : undefined}
+      tabIndex={onSelect ? 0 : undefined}
+      onKeyDown={
+        onSelect
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onSelect();
+              }
+            }
+          : undefined
+      }
+      aria-pressed={onSelect ? isSelected : undefined}
+      className={cn(
+        "flex flex-col gap-4 rounded-xl border bg-card p-5 transition-all outline-offset-2 focus-visible:outline-2 focus-visible:outline-brand",
+        onSelect && "cursor-pointer hover:-translate-y-0.5 hover:shadow-md",
+        isSelected
+          ? "border-[var(--mb-ink)] ring-1 ring-[var(--mb-ink)]"
+          : "border-border",
+      )}
     >
-      {/* Header row */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px" }}>
-        <div>
-          <div
-            style={{
-              fontSize: "15px",
-              fontWeight: 600,
-              color: "#181d26",
-              lineHeight: 1.3,
-            }}
-          >
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="truncate text-sm font-semibold text-foreground">
             {brand_name}
-          </div>
-          <div
-            style={{
-              fontSize: "13px",
-              color: "#41454d",
-              marginTop: "2px",
-            }}
-          >
-            {generic_name}
-          </div>
+          </h3>
+          {generic_name && (
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+              {generic_name}
+            </p>
+          )}
         </div>
-        <StatusBadge status={status} />
+        {status && <StatusBadge status={status} />}
       </div>
 
-      {/* Meta grid */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: "10px",
-          paddingTop: "10px",
-          borderTop: "1px solid #e0e2e6",
-        }}
-      >
-        <MetaItem label="Stock" value={`${stock} units`} />
-        <MetaItem label="Price" value={`₹${price.toFixed(2)}`} />
-        <MetaItem label="Expiry" value={expiryStr} />
-        {dosage_form && <MetaItem label="Form" value={dosage_form} />}
-      </div>
+      {/* Meta */}
+      {(stock !== undefined || price !== undefined || dosage_form) && (
+        <>
+          <div className="h-px bg-border" />
+          <div className="grid grid-cols-3 gap-3">
+            {stock !== undefined && (
+              <Meta label="Stock">
+                <span
+                  className={cn(
+                    "font-mono text-sm font-medium tabular-nums",
+                    stock > 0 && stock < 10 && "text-red-600",
+                  )}
+                >
+                  {stock}
+                </span>
+              </Meta>
+            )}
+            {price !== undefined && (
+              <Meta label="MRP">
+                <span className="font-mono text-sm font-medium tabular-nums">
+                  ₹{price.toFixed(2)}
+                </span>
+              </Meta>
+            )}
+            {dosage_form && (
+              <Meta label="Form">
+                <span className="text-xs text-foreground">{dosage_form}</span>
+              </Meta>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Decay chip */}
+      {hasExpiry && expiry_date && days_left !== undefined && (
+        <DecayChip expiryDate={expiry_date} daysLeft={days_left} />
+      )}
 
       {/* Manufacturer */}
       {manufacturer && (
-        <div style={{ fontSize: "12px", color: "#41454d", fontWeight: 400 }}>
-          Mfg: {manufacturer}
-        </div>
+        <p className="truncate text-xs text-muted-foreground">Mfg: {manufacturer}</p>
       )}
     </div>
   );
 }
 
-function MetaItem({ label, value }: { label: string; value: string }) {
+function Meta({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div>
-      <div style={{ fontSize: "11px", color: "#41454d", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+    <div className="min-w-0">
+      <p className="text-[10px] font-medium tracking-[0.05em] text-muted-foreground uppercase">
         {label}
-      </div>
-      <div style={{ fontSize: "13px", color: "#181d26", fontWeight: 500, marginTop: "2px" }}>
-        {value}
-      </div>
+      </p>
+      <div className="mt-0.5">{children}</div>
     </div>
   );
 }
