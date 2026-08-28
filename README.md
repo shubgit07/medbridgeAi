@@ -55,8 +55,7 @@ MedBridge is a hyperlocal B2B SaaS platform connecting licensed pharmacies to tr
    $$\text{Urgency Score} = 0.40 \cdot e^{-0.02 \cdot \text{days}} + 0.25 \cdot \left(\frac{1}{1 + \text{distance}}\right) + 0.25 \cdot \text{demand} + 0.10 \cdot \text{trust}$$
 
 2. **Sigmoid Dynamic Expiry-Decay Pricing:**
-   Automatically computes suggested discounts deepening as expiry approaches (Floor: 75% off at 7 days):
-   $$\text{Discount \%} = \frac{75\%}{1 + e^{-0.08 \cdot (\text{days} - 45)}}$$
+   Automatically computes suggested discounts deepening as expiry approaches :
 
 3. **Regulatory Compliance Layer:**
    - **Form 20/21 License Verification:** Unverified pharmacies cannot trade.
