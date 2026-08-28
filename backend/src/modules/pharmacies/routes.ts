@@ -14,13 +14,13 @@ export async function pharmacyRoutes(fastify: FastifyInstance) {
       phone: z.string().min(10),
       email: z.string().email().optional(),
       address: z.string().min(5),
-      latitude: z.number(),
-      longitude: z.number(),
+      latitude: z.number().min(-90).max(90),
+      longitude: z.number().min(-180).max(180),
       city: z.string().min(2),
       pincode: z.string().min(5),
       drugLicenseNo: z.string().min(3),
       licenseType: z.enum(['Form20', 'Form21']),
-      licenseScanUrl: z.string().url().optional(),
+      licenseScanUrl: z.string().url(),
     });
 
     const parse = schemaBody.safeParse(request.body);
@@ -29,6 +29,9 @@ export async function pharmacyRoutes(fastify: FastifyInstance) {
     }
 
     const data = parse.data;
+    if (!data.licenseScanUrl) {
+      return reply.status(400).send({ error: 'A Form 20/21 license scan URL is required for verification' });
+    }
 
     // Insert or update pharmacy profile
     const [pharmacy] = await db
@@ -57,12 +60,17 @@ export async function pharmacyRoutes(fastify: FastifyInstance) {
           name: data.name,
           ownerName: data.ownerName,
           phone: data.phone,
+          email: data.email,
           address: data.address,
           latitude: data.latitude.toString(),
           longitude: data.longitude.toString(),
           location: { latitude: data.latitude, longitude: data.longitude },
           city: data.city,
           pincode: data.pincode,
+          drugLicenseNo: data.drugLicenseNo,
+          licenseType: data.licenseType,
+          licenseScanUrl: data.licenseScanUrl,
+          isVerified: false,
           updatedAt: new Date(),
         },
       })

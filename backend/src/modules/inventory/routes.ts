@@ -40,6 +40,8 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
           expiry_date: row.expiryDate,
           price: Number(row.askingPrice),
           mrp: Number(row.mrp),
+          discount_pct: Number(row.discountPct),
+          status: row.status,
           days_left: Math.ceil((expiry.getTime() - now) / (1000 * 60 * 60 * 24)),
         };
       });

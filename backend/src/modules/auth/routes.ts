@@ -11,7 +11,7 @@ export async function authRoutes(fastify: FastifyInstance) {
       name: z.string().min(2),
       email: z.string().email(),
       password: z.string().min(6),
-      role: z.enum(['pharmacy', 'admin']).default('pharmacy'),
+      role: z.literal('pharmacy').default('pharmacy'),
     });
 
     const parseResult = bodySchema.safeParse(request.body);
@@ -20,10 +20,11 @@ export async function authRoutes(fastify: FastifyInstance) {
     }
 
     const { name, email, password, role } = parseResult.data;
+    const normalizedEmail = email.toLowerCase();
 
     // Check existing email
     const existing = await db.query.users.findFirst({
-      where: eq(schema.users.email, email),
+      where: eq(schema.users.email, normalizedEmail),
     });
 
     if (existing) {
@@ -31,15 +32,18 @@ export async function authRoutes(fastify: FastifyInstance) {
     }
 
     // Create user
-    const [newUser] = await db
-      .insert(schema.users)
-      .values({
-        name,
-        email,
-        password: hashPassword(password),
-        role,
-      })
-      .returning();
+    let newUser: typeof schema.users.$inferSelect;
+    try {
+      const created = await db
+        .insert(schema.users)
+        .values({ name, email: normalizedEmail, password: hashPassword(password), role })
+        .returning();
+      newUser = created[0];
+      if (!newUser) throw new Error('User insert returned no row');
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(409).send({ error: 'Email already registered' });
+    }
 
     const token = fastify.jwt.sign({
       userId: newUser.id,
@@ -69,7 +73,7 @@ export async function authRoutes(fastify: FastifyInstance) {
     const { email, password } = parseResult.data;
 
     const user = await db.query.users.findFirst({
-      where: eq(schema.users.email, email),
+      where: eq(schema.users.email, email.toLowerCase()),
     });
 
     if (!user || !verifyPassword(password, user.password)) {

@@ -18,7 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 interface InventoryItem {
-  medicine_id: number;
+  medicine_id: string;
   brand_name: string;
   generic_name: string;
   dosage_form?: string;
@@ -58,7 +58,11 @@ export default function InventoryPage() {
       .then(({ data }) => {
         if (!cancelled) setItems(Array.isArray(data) ? data : []);
       })
-      .catch(() => {
+      .catch((error: { response?: { status?: number } }) => {
+        if (error?.response?.status === 404) {
+          router.replace("/onboarding");
+          return;
+        }
         if (!cancelled) setFetchFailed(true);
       })
       .finally(() => {
@@ -177,12 +181,12 @@ export default function InventoryPage() {
       </div>
 
       {/* Table */}
-      <Card className="mt-5 overflow-hidden p-0">
+      <Card className="mt-5 overflow-x-auto p-0">
         {loading ? (
           /* Loading skeleton */
           <div className="divide-y">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="grid grid-cols-[minmax(0,2.5fr)_minmax(0,1.8fr)_80px_90px_160px_110px] items-center gap-4 px-6 py-4">
+              <div key={i} className="grid min-w-[760px] grid-cols-[minmax(0,2.5fr)_minmax(0,1.8fr)_80px_90px_160px_110px] items-center gap-4 px-6 py-4">
                 <div className="space-y-2">
                   <Skeleton className="h-3.5 w-3/4" />
                   <Skeleton className="h-3 w-1/4" />
@@ -221,7 +225,7 @@ export default function InventoryPage() {
         ) : (
           <>
             {/* Header row */}
-            <div className="grid grid-cols-[minmax(0,2.5fr)_minmax(0,1.8fr)_80px_90px_160px_110px] items-center gap-4 border-b bg-muted/50 px-6 py-2.5">
+            <div className="grid min-w-[760px] grid-cols-[minmax(0,2.5fr)_minmax(0,1.8fr)_80px_90px_160px_110px] items-center gap-4 border-b bg-muted/50 px-6 py-2.5">
               <span className="text-[11px] font-semibold tracking-[0.05em] text-muted-foreground uppercase">
                 Medicine brand
               </span>
@@ -243,7 +247,7 @@ export default function InventoryPage() {
             </div>
 
             {/* Rows */}
-            <ul className="divide-y">
+            <ul className="min-w-[760px] divide-y">
               {filtered.map((item) => {
                 const status = statusOf(item);
                 return (

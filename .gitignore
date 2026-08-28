@@ -27,11 +27,14 @@ frontend/.kiro/
 skills-lock.json
 
 # Local notes and docs (kept off GitHub per project policy)
+gpt edits.md
 resume_alignment.md
-docs/
-
-# Local progress notes
 fontendprogress.md
+docs/
+*.md
+!README.md
+frontend/*.md
+backend/*.md
 
 # System & OS
 .DS_Store

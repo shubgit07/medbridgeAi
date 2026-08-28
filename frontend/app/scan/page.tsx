@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import {
   AlertCircle,
   ArrowRight,
@@ -20,6 +21,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
 
 const BarcodeScanner = dynamic(() => import("react-qr-barcode-scanner"), {
   ssr: false,
@@ -36,6 +38,15 @@ async function runOCR(file: File): Promise<string> {
     logger: (m: { status?: string }) => console.log("OCR:", m),
   });
   return result.data.text;
+}
+
+function fileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error || new Error("Unable to read image"));
+    reader.readAsDataURL(file);
+  });
 }
 
 const STEPS = ["Choose method", "Fill details", "Confirm & save"];
@@ -125,9 +136,11 @@ interface FormState {
   generic_name: string;
   dosage_form: string;
   manufacturer: string;
+  batch_number: string;
   stock_qty: string;
   expiry_date: string;
-  price: string;
+  mrp: string;
+  asking_price: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -135,12 +148,16 @@ const EMPTY_FORM: FormState = {
   generic_name: "",
   dosage_form: "",
   manufacturer: "",
+  batch_number: "",
   stock_qty: "",
   expiry_date: "",
-  price: "",
+  mrp: "",
+  asking_price: "",
 };
 
 export default function ScanPage() {
+  const router = useRouter();
+  const { isLoggedIn } = useAuth();
   const [step, setStep] = useState(0);
   const [showQR, setShowQR] = useState(false);
   const [ocrLoading, setOcrLoading] = useState(false);
@@ -148,9 +165,44 @@ export default function ScanPage() {
   const [submitLoading, setSubmitLoading] = useState(false);
   const [message, setMessage] = useState<ScanMessage | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [suggestedPrice, setSuggestedPrice] = useState<number | null>(null);
 
-  const handleQR = (err: unknown, result?: { getText: () => string }) => {
-    if (result) console.log("QR:", result.getText());
+  useEffect(() => {
+    if (!isLoggedIn) router.replace("/signin");
+  }, [isLoggedIn, router]);
+
+  useEffect(() => {
+    const mrp = Number(form.mrp);
+    if (!form.expiry_date || !Number.isFinite(mrp) || mrp <= 0) {
+      setSuggestedPrice(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      API.get("/listings/suggest-price", { params: { mrp, expiryDate: form.expiry_date } })
+        .then((response) => setSuggestedPrice(Number(response.data?.suggestion?.suggestedPrice) || null))
+        .catch(() => setSuggestedPrice(null));
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [form.expiry_date, form.mrp]);
+
+  const handleQR = async (_err: unknown, result?: { getText: () => string }) => {
+    if (!result) return;
+    try {
+      const response = await API.post("/ocr/parse-barcode", { barcode: result.getText() });
+      const data = response.data?.data;
+      setForm((prev) => ({
+        ...prev,
+        expiry_date: data?.expiryDate || prev.expiry_date,
+        batch_number: data?.batchNumber || prev.batch_number,
+      }));
+      setShowQR(false);
+      setStep(1);
+      setMessage({ text: "Barcode details captured. Review the remaining fields before publishing.", type: "info" });
+    } catch {
+      setMessage({ text: "The barcode could not be parsed. Enter the batch details manually.", type: "error" });
+      setShowQR(false);
+      setStep(1);
+    }
   };
 
   const handleOCR = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -159,30 +211,51 @@ export default function ScanPage() {
     setOcrLoading(true);
     setMessage(null);
     try {
-      const text = await runOCR(file);
-      if (!text || text.trim() === "") {
-        setMessage({
-          text: "No clear text detected on the label. Please enter the details manually below.",
-          type: "error",
-        });
-        setStep(1);
-        return;
+      const imageBase64 = await fileAsDataUrl(file);
+      const queued = await API.post("/ocr/jobs", { imageBase64, mimeType: file.type });
+      const jobId = queued.data?.jobId as string;
+      let result: Record<string, unknown> | null = null;
+      for (let attempt = 0; attempt < 30 && !result; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 700));
+        const status = await API.get(`/ocr/jobs/${jobId}`);
+        if (status.data?.job?.status === "failed") throw new Error(status.data.job.error || "OCR failed");
+        if (status.data?.job?.status === "completed") result = status.data.job.result as Record<string, unknown>;
       }
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      const response = await fetch(`${baseUrl}/ocr/extract-medicine`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-      const data = await response.json();
-      setForm((prev) => ({ ...prev, ...data.data }));
+      if (!result) throw new Error("OCR timed out");
+      if (!result.brandName && !result.expiryDate && !result.mrp) throw new Error("No structured label data returned");
+      setForm((prev) => ({
+        ...prev,
+        brand_name: String(result?.brandName || prev.brand_name),
+        generic_name: String(result?.genericName || prev.generic_name),
+        dosage_form: String(result?.dosageForm || prev.dosage_form),
+        manufacturer: String(result?.manufacturer || prev.manufacturer),
+        batch_number: String(result?.batchNumber || prev.batch_number),
+        expiry_date: String(result?.expiryDate || prev.expiry_date),
+        mrp: result?.mrp ? String(result.mrp) : prev.mrp,
+        asking_price: result?.mrp ? String(Number(result.mrp) * 0.5) : prev.asking_price,
+      }));
       setStep(1);
-    } catch (err) {
-      console.error(err);
-      setMessage({
-        text: "AI extraction is unavailable right now. Please complete the details manually.",
-        type: "info",
-      });
+    } catch {
+      try {
+        const text = await runOCR(file);
+        if (!text.trim()) throw new Error("No text detected");
+        const response = await API.post("/ocr/extract-medicine", { text });
+        const data = response.data.data;
+        setForm((prev) => ({
+          ...prev,
+          brand_name: data.brandName || prev.brand_name,
+          generic_name: data.genericName || prev.generic_name,
+          dosage_form: data.dosageForm || prev.dosage_form,
+          manufacturer: data.manufacturer || prev.manufacturer,
+          batch_number: data.batchNumber || prev.batch_number,
+          expiry_date: data.expiryDate || prev.expiry_date,
+          mrp: data.mrp ? String(data.mrp) : prev.mrp,
+          asking_price: data.mrp ? String(Number(data.mrp) * 0.5) : prev.asking_price,
+        }));
+        setMessage({ text: "The queued OCR service was unavailable, so local OCR filled the form. Review every field.", type: "info" });
+      } catch {
+        setMessage({ text: "AI extraction is unavailable right now. Complete the details manually.", type: "info" });
+      }
       setStep(1);
     } finally {
       setOcrLoading(false);
@@ -209,10 +282,10 @@ export default function ScanPage() {
         dosageForm: form.dosage_form,
         manufacturer: form.manufacturer,
         quantity: Number(form.stock_qty),
-        askingPrice: Number(form.price),
-        mrp: Number(form.price) * 1.5,
+        askingPrice: Number(form.asking_price),
+        mrp: Number(form.mrp),
         expiryDate: form.expiry_date,
-        batchNumber: "BN-" + Math.floor(Math.random() * 89999 + 10000),
+        batchNumber: form.batch_number || "BN-" + Math.floor(Math.random() * 89999 + 10000),
       });
       setStep(2);
     } catch {
@@ -395,6 +468,17 @@ export default function ScanPage() {
                     placeholder="e.g. Cipla Ltd"
                   />
                 </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="field-batch">Batch number</Label>
+                  <Input
+                    id="field-batch"
+                    name="batch_number"
+                    value={form.batch_number}
+                    onChange={handleChange}
+                    placeholder="e.g. BTH-2408-A"
+                    required
+                  />
+                </div>
               </div>
             </fieldset>
 
@@ -418,18 +502,33 @@ export default function ScanPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="field-price">Asking price (₹)</Label>
+                  <Label htmlFor="field-mrp">MRP per unit (₹)</Label>
+                  <Input
+                    id="field-mrp"
+                    name="mrp"
+                    type="number"
+                    min={0.01}
+                    step="0.01"
+                    value={form.mrp}
+                    onChange={handleChange}
+                    placeholder="120.00"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="field-price">Asking price per unit (₹)</Label>
                   <Input
                     id="field-price"
-                    name="price"
+                    name="asking_price"
                     type="number"
-                    min={0}
+                    min={0.01}
                     step="0.01"
-                    value={form.price}
+                    value={form.asking_price}
                     onChange={handleChange}
                     placeholder="45.00"
                     required
                   />
+                  {suggestedPrice !== null && <p className="text-xs text-brand">Pricing engine suggestion: ₹{suggestedPrice.toFixed(2)} per unit</p>}
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
                   <Label htmlFor="field-expiry">Expiry date</Label>

@@ -55,4 +55,24 @@ export async function drugRoutes(fastify: FastifyInstance) {
 
     return reply.status(201).send({ message: 'Drug created', drug });
   });
+
+  // Records a buyer's local demand without exposing private pharmacy data to sellers.
+  fastify.post('/:id/demand', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const userId = (request.user as { userId: string }).userId;
+    const { id } = request.params as { id: string };
+    const pharmacy = await db.query.pharmacies.findFirst({ where: eq(schema.pharmacies.userId, userId) });
+    const drug = await db.query.drugs.findFirst({ where: eq(schema.drugs.id, id) });
+    if (!pharmacy || !drug) return reply.status(404).send({ error: 'Pharmacy or drug not found' });
+
+    const now = new Date();
+    const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - ((now.getUTCDay() + 6) % 7)));
+    const [signal] = await db.insert(schema.demandSignals).values({
+      drugId: drug.id,
+      pincode: pharmacy.pincode,
+      city: pharmacy.city,
+      signalCount: 1,
+      weekStart: monday.toISOString().slice(0, 10),
+    }).returning();
+    return reply.status(201).send({ signal });
+  });
 }

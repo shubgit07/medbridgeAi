@@ -32,14 +32,38 @@ export const alertsQueue = new Queue('alerts-queue', {
   connection: redisConnection,
 });
 
+export const ocrQueue = new Queue('ocr-queue', {
+  connection: redisConnection,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 2_000 },
+    removeOnComplete: 100,
+    removeOnFail: 100,
+  },
+});
+
 /**
  * Enqueues a matching job when a new medicine listing is created.
  */
 export async function enqueueMatchingJob(listingId: string) {
   try {
-    await matchingQueue.add('run-matching-engine', { listingId });
+    await matchingQueue.add('run-matching-engine', { listingId }, { jobId: `listing:${listingId}` });
   } catch (err) {
     console.error('Failed to enqueue matching job:', err);
+  }
+}
+
+export async function enqueueOcrJob(data: {
+  jobId: string;
+  text?: string;
+  imageBase64?: string;
+  mimeType?: string;
+}) {
+  try {
+    await ocrQueue.add('extract-medicine', data, { jobId: `ocr:${data.jobId}` });
+  } catch (err) {
+    console.error('Failed to enqueue OCR job:', err);
+    throw err;
   }
 }
 

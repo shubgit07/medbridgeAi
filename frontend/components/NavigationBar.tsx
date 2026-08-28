@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/sheet";
 import { emitAuthChange, useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
+import NotificationCenter from "@/components/NotificationCenter";
 
 const NAV_LINKS = [
   { href: "/search", label: "Medicine Search", auth: false },
@@ -88,6 +89,7 @@ export default function Navbar() {
         <div className="flex shrink-0 items-center gap-2">
           {isLoggedIn ? (
             <>
+              <NotificationCenter />
               <Button
                 size="sm"
                 onClick={() => router.push("/scan")}

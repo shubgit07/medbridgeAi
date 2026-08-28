@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS postgis;
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "audit_log" (
 	"id" bigserial PRIMARY KEY NOT NULL,
 	"actor_id" uuid,

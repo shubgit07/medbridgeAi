@@ -10,5 +10,8 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || 'super-secret-medbridge-jwt-key-2026',
   groqApiKey: process.env.GROQ_API_KEY || '',
   geminiApiKey: process.env.GEMINI_API_KEY || '',
+  geminiModel: process.env.GEMINI_MODEL || 'gemini-1.5-flash',
   cloudflareApiToken: process.env.CLOUDFLARE_API_TOKEN || '',
+  cloudflareAccountId: process.env.CLOUDFLARE_ACCOUNT_ID || '',
+  cloudflareAiModel: process.env.CLOUDFLARE_AI_MODEL || '@cf/meta/llama-3.1-8b-instruct',
 };

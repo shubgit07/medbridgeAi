@@ -9,6 +9,7 @@ import AuthShell from "@/components/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { emitAuthChange } from "@/hooks/useAuth";
 
 export default function SigninPage() {
   const router = useRouter();
@@ -30,6 +31,7 @@ export default function SigninPage() {
       if (res.data.user?.name) {
         localStorage.setItem("pharmacy_name", res.data.user.name);
       }
+      emitAuthChange();
       router.push("/dashboard");
     } catch (err) {
       const resp = err as { response?: { data?: { error?: string; detail?: string; message?: string } } };
@@ -45,13 +47,13 @@ export default function SigninPage() {
 
   return (
     <AuthShell
-      headline="Licensed B2B near-expiry exchange"
-      subcopy="Prevent pharmaceutical waste, track expiry decay, and connect directly with verified pharmacies in your area."
+      headline="Stop medicine waste. Recover dead stock."
+      subcopy="Pharmacies discard thousands in expiring medicines while nearby stores face shortages. MedBridge matches local pharmacies to trade near-expiry stock at automated discounts before it goes to waste."
       features={[
-        "Verified pharmacy badges",
-        "Direct delivery between pharmacies",
-        "Pay on delivery",
-        "Form 19 invoice compliance",
+        "Liquidate expiring stock within 10 km",
+        "Automated dynamic discounts up to 75% off",
+        "Verified Form 20/21 pharmacy network",
+        "Direct delivery with Form 19 invoices",
       ]}
     >
       <div className="w-full max-w-sm">

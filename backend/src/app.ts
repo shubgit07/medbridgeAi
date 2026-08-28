@@ -13,17 +13,17 @@ import { inventoryRoutes } from './modules/inventory/routes.js';
 import { ocrRoutes } from './modules/ocr/routes.js';
 import { aiRoutes } from './modules/ai/routes.js';
 import { registerWebSocketRoutes } from './websocket/notifications.js';
-import { setupScheduledAlertJobs } from './jobs/queues.js';
 
 // Extend FastifyInstance type to include authenticate decorator
 declare module 'fastify' {
   interface FastifyInstance {
-    authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
   }
 }
 
 export function buildApp(): FastifyInstance {
   const fastify = Fastify({
+    bodyLimit: 8 * 1024 * 1024,
     logger: {
       transport: {
         target: "pino-pretty",
@@ -52,7 +52,7 @@ export function buildApp(): FastifyInstance {
     try {
       await request.jwtVerify();
     } catch (err) {
-      reply.status(401).send({ error: 'Unauthorized: Invalid or missing token' });
+      return reply.status(401).send({ error: 'Unauthorized: Invalid or missing token' });
     }
   });
 
@@ -73,9 +73,6 @@ export function buildApp(): FastifyInstance {
 
   // Register WebSocket Route
   registerWebSocketRoutes(fastify);
-
-  // Setup BullMQ Cron Schedulers
-  setupScheduledAlertJobs();
 
   return fastify;
 }

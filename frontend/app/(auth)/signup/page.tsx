@@ -9,6 +9,7 @@ import AuthShell from "@/components/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { emitAuthChange } from "@/hooks/useAuth";
 
 interface SignupForm {
   name: string;
@@ -44,7 +45,8 @@ export default function SignupPage() {
       const token = res.data.accessToken || res.data.user_id;
       if (token) localStorage.setItem("token", token);
       localStorage.setItem("pharmacy_name", form.name.trim());
-      router.push("/dashboard");
+      emitAuthChange();
+      router.push("/onboarding");
     } catch (err) {
       const resp = err as { response?: { data?: { error?: string; detail?: string; message?: string } } };
       setError(
@@ -59,13 +61,13 @@ export default function SignupPage() {
 
   return (
     <AuthShell
-      headline="Join the B2B pharmacy network"
-      subcopy="Register your licensed pharmacy to list near-expiry medicines, find generic salt substitutes, and buy at discounted prices."
+      headline="Trade near-expiry stock before it expires."
+      subcopy="Sell excess inventory before write-offs, or source high-demand medicines at up to 75% discount. A licensed B2B network built to cut pharma inventory waste."
       features={[
-        "Form 20/21 license verification",
-        "Direct delivery between pharmacies",
-        "Pay on delivery",
-        "Free registration",
+        "Recover value on aging batches (T-90 to T-7 days)",
+        "Hyperlocal matching with nearby buyers",
+        "100% verified Form 20/21 pharmacies only",
+        "Pay on delivery with Form 19 invoices",
       ]}
     >
       <div className="w-full max-w-sm">

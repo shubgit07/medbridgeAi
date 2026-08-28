@@ -21,7 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 interface InventoryItem {
-  medicine_id: number;
+  medicine_id: string;
   brand_name: string;
   generic_name?: string;
   stock_qty: number;
@@ -77,7 +77,11 @@ export default function Dashboard() {
       .then((res) => {
         if (!cancelled && Array.isArray(res.data)) setItems(res.data);
       })
-      .catch(() => {
+      .catch((error: { response?: { status?: number } }) => {
+        if (error?.response?.status === 404) {
+          router.replace("/onboarding");
+          return;
+        }
         if (!cancelled) setFetchFailed(true);
       })
       .finally(() => {

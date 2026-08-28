@@ -11,6 +11,8 @@ import {
   jsonb,
   bigserial,
   customType,
+  index,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
@@ -23,11 +25,11 @@ export const geographyPoint = customType<{
     return 'geography(Point, 4326)';
   },
   toDriver(value) {
-    return `POINT(${value.longitude} ${value.latitude})`;
+    return `SRID=4326;POINT(${value.longitude} ${value.latitude})`;
   },
   fromDriver(value) {
     // Expected format: POINT(lng lat) or binary representation
-    if (typeof value === 'string' && value.startsWith('POINT')) {
+    if (typeof value === 'string') {
       const match = value.match(/POINT\((-?\d+\.?\d*)\s+(-?\d+\.?\d*)\)/);
       if (match) {
         return { longitude: parseFloat(match[1]), latitude: parseFloat(match[2]) };
@@ -54,7 +56,7 @@ export const users = pgTable('users', {
 // ----------------------------------------------------------------------
 export const pharmacies = pgTable('pharmacies', {
   id: uuid('id').defaultRandom().primaryKey(),
-  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
   name: varchar('name', { length: 255 }).notNull(),
   ownerName: varchar('owner_name', { length: 255 }).notNull(),
   phone: varchar('phone', { length: 15 }).notNull().unique(),
@@ -72,7 +74,10 @@ export const pharmacies = pgTable('pharmacies', {
   trustScore: decimal('trust_score', { precision: 3, scale: 2 }).default('0.50').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  userIdUnique: uniqueIndex('pharmacies_user_id_unique').on(table.userId),
+  locationGist: index('pharmacies_location_gist').using('gist', table.location),
+}));
 
 // ----------------------------------------------------------------------
 // DRUGS MASTER TABLE
@@ -109,7 +114,10 @@ export const listings = pgTable('listings', {
   listedAt: timestamp('listed_at').defaultNow().notNull(),
   expiresAt: date('expires_at').notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  statusExpiryIdx: index('listings_status_expiry_idx').on(table.status, table.expiryDate),
+  pharmacyIdx: index('listings_pharmacy_idx').on(table.pharmacyId),
+}));
 
 // ----------------------------------------------------------------------
 // ORDERS TABLE
@@ -140,7 +148,9 @@ export const demandSignals = pgTable('demand_signals', {
   signalCount: integer('signal_count').default(1).notNull(),
   weekStart: date('week_start').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  matchingIdx: index('demand_signals_matching_idx').on(table.drugId, table.pincode, table.city, table.weekStart),
+}));
 
 // ----------------------------------------------------------------------
 // NOTIFICATIONS TABLE
@@ -154,7 +164,27 @@ export const notifications = pgTable('notifications', {
   metadata: jsonb('metadata'),
   isRead: boolean('is_read').default(false).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (table) => ({
+  pharmacyCreatedIdx: index('notifications_pharmacy_created_idx').on(table.pharmacyId, table.createdAt),
+}));
+
+// ----------------------------------------------------------------------
+// ASYNC OCR JOBS TABLE
+// ----------------------------------------------------------------------
+export const ocrJobs = pgTable('ocr_jobs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  requestedBy: uuid('requested_by').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  status: varchar('status', { length: 20 }).default('queued').notNull(), // queued | processing | completed | failed
+  inputText: text('input_text'),
+  provider: varchar('provider', { length: 50 }),
+  result: jsonb('result'),
+  error: text('error'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  completedAt: timestamp('completed_at'),
+}, (table) => ({
+  requesterCreatedIdx: index('ocr_jobs_requester_created_idx').on(table.requestedBy, table.createdAt),
+}));
 
 // ----------------------------------------------------------------------
 // AUDIT LOG TABLE
@@ -188,6 +218,8 @@ export const pharmaciesRelations = relations(pharmacies, ({ one, many }) => ({
   }),
   listings: many(listings),
   notifications: many(notifications),
+  ordersAsBuyer: many(orders, { relationName: 'buyer_orders' }),
+  ordersAsSeller: many(orders, { relationName: 'seller_orders' }),
 }));
 
 export const drugsRelations = relations(drugs, ({ many }) => ({
@@ -203,5 +235,36 @@ export const listingsRelations = relations(listings, ({ one }) => ({
   drug: one(drugs, {
     fields: [listings.drugId],
     references: [drugs.id],
+  }),
+}));
+
+export const ordersRelations = relations(orders, ({ one }) => ({
+  listing: one(listings, {
+    fields: [orders.listingId],
+    references: [listings.id],
+  }),
+  buyer: one(pharmacies, {
+    fields: [orders.buyerId],
+    references: [pharmacies.id],
+    relationName: 'buyer_orders',
+  }),
+  seller: one(pharmacies, {
+    fields: [orders.sellerId],
+    references: [pharmacies.id],
+    relationName: 'seller_orders',
+  }),
+}));
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  pharmacy: one(pharmacies, {
+    fields: [notifications.pharmacyId],
+    references: [pharmacies.id],
+  }),
+}));
+
+export const ocrJobsRelations = relations(ocrJobs, ({ one }) => ({
+  requester: one(users, {
+    fields: [ocrJobs.requestedBy],
+    references: [users.id],
   }),
 }));

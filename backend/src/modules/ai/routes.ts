@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { config } from '../../config.js';
 import { db, schema } from '../../db/index.js';
 import { ilike, or, eq, ne, and } from 'drizzle-orm';
+import { extractMedicine } from '../../services/medicineExtraction.js';
 
 export async function aiRoutes(fastify: FastifyInstance) {
   // POST /ai/seller-insight - Groq API LPU Sub-Second Seller Advice Generator
@@ -54,6 +55,7 @@ Give advice on whether this price is optimal to clear the stock before expiry wi
         }),
       });
 
+      if (!response.ok) throw new Error(`Groq returned HTTP ${response.status}`);
       const data = await response.json();
       const insight = data.choices?.[0]?.message?.content || 'Consider increasing discount as expiry approaches.';
 
@@ -80,58 +82,8 @@ Give advice on whether this price is optimal to clear the stock before expiry wi
 
     const { ocrText } = parse.data;
 
-    // Fallback if Gemini key not set
-    if (!config.geminiApiKey) {
-      // Regex extraction fallback
-      const expiryMatch = ocrText.match(/(?:EXP|EXPIRY|USE BEFORE)[\s:]+(\d{2}[\/\-]\d{2}[\/\-]\d{4}|\d{2}[\/\-]\d{4})/i);
-      const batchMatch = ocrText.match(/(?:BATCH|B\.NO|LOT)[\s:]+([A-Z0-9\-]+)/i);
-      const mrpMatch = ocrText.match(/(?:MRP|M\.R\.P)[\s:₹]+(\d+\.?\d*)/i);
-
-      return reply.send({
-        provider: 'regex-engine',
-        data: {
-          brandName: ocrText.split('\n')[0] || 'Crocin 500mg',
-          genericName: ocrText.toLowerCase().includes('paracetamol') ? 'Paracetamol' : 'Generic Salt',
-          dosageForm: ocrText.toLowerCase().includes('syrup') ? 'Syrup' : 'Tablet',
-          manufacturer: 'Unknown',
-          batchNumber: batchMatch ? batchMatch[1] : 'BN2026-X',
-          expiryDate: expiryMatch ? expiryMatch[1] : '2026-08-31',
-          mrp: mrpMatch ? parseFloat(mrpMatch[1]) : 120.0,
-        },
-      });
-    }
-
-    try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${config.geminiApiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                    text: `Extract structured medicine JSON from raw label text: "${ocrText}".
-Return ONLY valid JSON with keys: brandName, genericName, dosageForm, manufacturer, batchNumber, expiryDate (YYYY-MM-DD), mrp (number).`,
-                  },
-                ],
-              },
-            ],
-          }),
-        }
-      );
-
-      const resData = await response.json();
-      const rawText = resData.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      const cleanJson = rawText.replace(/```json|```/g, '').trim();
-
-      const parsed = JSON.parse(cleanJson);
-      return reply.send({ provider: 'gemini-1.5-flash', data: parsed });
-    } catch (err) {
-      console.error('[Gemini AI Error]', err);
-      return reply.status(500).send({ error: 'Gemini extraction failed' });
-    }
+    const result = await extractMedicine({ text: ocrText });
+    return reply.send({ provider: result.provider, data: result.data });
   });
 
   // POST /ai/substitutes - Generic Salt Brand Substitute Recommender

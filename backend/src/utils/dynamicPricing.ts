@@ -7,15 +7,22 @@
  * - At 14 days: ~65% discount
  * - At  7 days: ~75% discount (floor)
  * 
- * Formula: discount = max_discount / (1 + e^(k * (days - midpoint)))
- * where midpoint = 45 days, k = -0.08
+ * Formula: discount = min_discount + (max_discount - min_discount) /
+ * (1 + e^(k * (days - midpoint)))
+ * where midpoint = 45 days and k = 0.08. A positive k makes the
+ * discount increase as the number of days remaining falls.
  */
 export function computeSuggestedPrice(mrp: number, daysToExpiry: number) {
+  if (!Number.isFinite(mrp) || mrp <= 0) {
+    throw new Error('MRP must be a positive number');
+  }
+
+  const MIN_DISCOUNT = 0.05;
   const MAX_DISCOUNT = 0.75;
   const MIDPOINT = 45;
-  const K = -0.08;
+  const K = 0.08;
 
-  let discountPct = MAX_DISCOUNT / (1 + Math.exp(K * (daysToExpiry - MIDPOINT)));
+  let discountPct = MIN_DISCOUNT + (MAX_DISCOUNT - MIN_DISCOUNT) / (1 + Math.exp(K * (daysToExpiry - MIDPOINT)));
   discountPct = Math.max(0.0, Math.min(MAX_DISCOUNT, discountPct));
 
   const suggestedPrice = mrp * (1 - discountPct);

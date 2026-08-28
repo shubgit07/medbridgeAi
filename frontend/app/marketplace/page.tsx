@@ -57,6 +57,7 @@ interface CartItem {
   mrp: number;
   unit: string;
   orderQty: number;
+  maxQuantity: number;
 }
 
 const fmt = (n: number) =>
@@ -158,10 +159,10 @@ export default function MarketplacePage() {
   }, [listings, search, expWin]);
 
   /* ── Cart ── */
-  const getQty = (id: string) => Math.max(1, Number(rowQty[id] ?? "1"));
+  const getQty = (id: string, maxQuantity: number) => Math.min(maxQuantity, Math.max(1, Number(rowQty[id] ?? "1")));
 
   const addToCart = (item: ListingItem) => {
-    const qty = getQty(item.id);
+    const qty = getQty(item.id, item.quantity);
     setCartOpen(true);
     setCart((prev) => ({
       ...prev,
@@ -173,11 +174,13 @@ export default function MarketplacePage() {
         mrp: item.mrp,
         unit: item.unit,
         orderQty: qty,
+        maxQuantity: item.quantity,
       },
     }));
   };
 
   const updateCartQty = (id: string, qty: number) => {
+    const item = cart[id];
     if (qty < 1) {
       setCart((prev) => {
         const next = { ...prev };
@@ -185,7 +188,7 @@ export default function MarketplacePage() {
         return next;
       });
     } else {
-      setCart((prev) => ({ ...prev, [id]: { ...prev[id], orderQty: qty } }));
+      setCart((prev) => ({ ...prev, [id]: { ...prev[id], orderQty: Math.min(qty, item?.maxQuantity || qty) } }));
     }
   };
 
@@ -329,11 +332,11 @@ export default function MarketplacePage() {
       </div>
 
       {/* Listings table */}
-      <Card className="mt-5 overflow-hidden p-0">
+      <Card className="mt-5 overflow-x-auto p-0">
         {loading ? (
           <div className="divide-y">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className={cn(GRID, "px-6 py-4")}>
+              <div key={i} className={cn(GRID, "min-w-[920px] px-6 py-4")}>
                 <div className="space-y-2">
                   <Skeleton className="h-4 w-4/5" />
                   <Skeleton className="h-3 w-3/5" />
@@ -378,7 +381,7 @@ export default function MarketplacePage() {
         ) : (
           <>
             {/* Header row */}
-            <div className={cn(GRID, "border-b bg-muted/50 px-6 py-2.5")}>
+            <div className={cn(GRID, "min-w-[920px] border-b bg-muted/50 px-6 py-2.5")}>
               {["Medicine item", "Batch & vendor", "Expiry decay", "Stock", "Price & discount", ""].map(
                 (h, i) => (
                   <span
@@ -392,7 +395,7 @@ export default function MarketplacePage() {
             </div>
 
             {/* Rows */}
-            <ul className="divide-y">
+            <ul className="min-w-[920px] divide-y">
               {filteredListings.map((item) => {
                 const inCart = Boolean(cart[item.id]);
                 return (
@@ -744,5 +747,3 @@ function CartSheet({
     </Sheet>
   );
 }
-
-
