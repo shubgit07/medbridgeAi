@@ -1,4 +1,4 @@
-# MedBridge — Near-Expiry Medicine Marketplace
+# MedBridge 
 
 > **Turning pharmacy dead stock into live revenue.**
 
